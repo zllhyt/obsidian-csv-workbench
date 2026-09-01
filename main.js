@@ -181,6 +181,9 @@ class CsvGrid {
 		this.history = [];
 		this.historyIndex = -1;
 		this.destroyed = false;
+		this.popoverEl = null;
+		this.popoverMode = null;
+		this.LONG_CELL_MIN = 36;
 		this.build();
 	}
 
@@ -203,7 +206,143 @@ class CsvGrid {
 
 	destroy() {
 		this.destroyed = true;
+		this.closePopover();
 		this.root.detach();
+	}
+
+	isLongContent(value) {
+		const s = value == null ? "" : String(value);
+		return s.length > this.LONG_CELL_MIN || /[\r\n]/.test(s);
+	}
+
+	closePopover() {
+		if (this._popoverOutside) {
+			document.removeEventListener("mousedown", this._popoverOutside);
+			this._popoverOutside = null;
+		}
+		if (this._popoverScroll && this.scroll) {
+			this.scroll.removeEventListener("scroll", this._popoverScroll);
+			this._popoverScroll = null;
+		}
+		if (this.popoverEl) {
+			this.popoverEl.remove();
+			this.popoverEl = null;
+		}
+		this.popoverMode = null;
+	}
+
+	positionPopover(pop, anchor) {
+		const margin = 8;
+		pop.style.visibility = "hidden";
+		pop.style.display = "block";
+		const rect = anchor.getBoundingClientRect();
+		const pw = pop.offsetWidth;
+		const ph = pop.offsetHeight;
+		let left = rect.left;
+		let top = rect.bottom + 6;
+		if (left + pw > window.innerWidth - margin) left = window.innerWidth - pw - margin;
+		if (left < margin) left = margin;
+		if (top + ph > window.innerHeight - margin) top = Math.max(margin, rect.top - ph - 6);
+		pop.style.left = left + "px";
+		pop.style.top = top + "px";
+		pop.style.visibility = "visible";
+	}
+
+	bindPopoverDismiss(pop, anchor) {
+		this._popoverOutside = (e) => {
+			if (pop.contains(e.target) || anchor.contains(e.target)) return;
+			this.closePopover();
+		};
+		setTimeout(() => document.addEventListener("mousedown", this._popoverOutside), 0);
+		this._popoverScroll = () => this.closePopover();
+		this.scroll.addEventListener("scroll", this._popoverScroll, { passive: true });
+	}
+
+	showPreviewPopover(anchorTd, r, c) {
+		const value = this.rows[r][c] || "";
+		if (!this.isLongContent(value)) {
+			this.closePopover();
+			return;
+		}
+		if (this.popoverMode === "preview" && this.popoverAnchor === anchorTd) return;
+		this.closePopover();
+		this.popoverAnchor = anchorTd;
+		const pop = document.body.createDiv({ cls: "csv-wb-popover csv-wb-popover-preview" });
+		const head = pop.createDiv({ cls: "csv-wb-popover-head" });
+		head.setText(`${colLetter(c)}${r + 1} · 完整内容`);
+		const body = pop.createDiv({ cls: "csv-wb-popover-body" });
+		body.setText(value);
+		const foot = pop.createDiv({ cls: "csv-wb-popover-foot" });
+		foot.setText("双击单元格可编辑完整内容");
+		this.popoverEl = pop;
+		this.popoverMode = "preview";
+		this.positionPopover(pop, anchorTd);
+		this.bindPopoverDismiss(pop, anchorTd);
+	}
+
+	startEditPopover(r, c, initial) {
+		const td = this.scroll.querySelector(`td[data-r="${r}"][data-c="${c}"]`);
+		if (!td) return;
+		this.closePopover();
+		this.editing = true;
+		this.select(r, c);
+		const current = this.rows[r][c] || "";
+		const pop = document.body.createDiv({ cls: "csv-wb-popover csv-wb-popover-edit" });
+		const head = pop.createDiv({ cls: "csv-wb-popover-head" });
+		head.setText(`${colLetter(c)}${r + 1} · 编辑`);
+		const ta = pop.createEl("textarea", { cls: "csv-wb-popover-textarea" });
+		ta.value = initial != null ? current + initial : current;
+		const foot = pop.createDiv({ cls: "csv-wb-popover-foot csv-wb-popover-actions" });
+		const saveBtn = foot.createEl("button", { cls: "csv-wb-btn csv-wb-popover-save", text: "保存" });
+		const cancelBtn = foot.createEl("button", { cls: "csv-wb-btn", text: "取消" });
+		foot.createSpan({ cls: "csv-wb-popover-hint", text: "Ctrl/Cmd+Enter 保存 · Esc 取消" });
+		this.popoverEl = pop;
+		this.popoverMode = "edit";
+		this.positionPopover(pop, td);
+		ta.focus();
+		ta.setSelectionRange(ta.value.length, ta.value.length);
+		const commit = () => {
+			if (!this.editing || this.popoverMode !== "edit") return;
+			this.editing = false;
+			this.closePopover();
+			this.setCell(r, c, ta.value);
+			this.root.focus();
+		};
+		const cancel = () => {
+			this.editing = false;
+			this.closePopover();
+			this.render();
+			this.select(r, c);
+			this.root.focus();
+		};
+		saveBtn.addEventListener("click", (e) => {
+			e.preventDefault();
+			commit();
+		});
+		cancelBtn.addEventListener("click", (e) => {
+			e.preventDefault();
+			cancel();
+		});
+		ta.addEventListener("keydown", (e) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				cancel();
+			} else if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+				e.preventDefault();
+				commit();
+			}
+			e.stopPropagation();
+		});
+		this._popoverOutside = (e) => {
+			if (pop.contains(e.target) || td.contains(e.target)) return;
+			commit();
+		};
+		setTimeout(() => document.addEventListener("mousedown", this._popoverOutside), 0);
+		this._popoverScroll = () => {
+			if (this.popoverMode === "edit") commit();
+			else this.closePopover();
+		};
+		this.scroll.addEventListener("scroll", this._popoverScroll, { passive: true });
 	}
 
 	buildToolbar() {
@@ -260,7 +399,15 @@ class CsvGrid {
 		if (this.editing) {
 			if (e.key === "Escape") {
 				e.preventDefault();
-				this.cancelEdit();
+				if (this.popoverMode === "edit") {
+					this.editing = false;
+					this.closePopover();
+					this.render();
+					this.select(this.sel.r, this.sel.c);
+					this.root.focus();
+				} else {
+					this.cancelEdit();
+				}
 			}
 			return;
 		}
@@ -496,6 +643,7 @@ class CsvGrid {
 	}
 
 	move(dr, dc) {
+		this.closePopover();
 		const r = Math.max(0, Math.min(this.rowCount() - 1, this.sel.r + dr));
 		const c = Math.max(0, Math.min(this.colCount() - 1, this.sel.c + dc));
 		this.select(r, c);
@@ -512,10 +660,14 @@ class CsvGrid {
 
 	startEdit(initial) {
 		const { r, c } = this.sel;
+		const current = this.rows[r][c] || "";
+		if (this.isLongContent(current) || (initial != null && this.isLongContent(String(current) + initial))) {
+			this.startEditPopover(r, c, initial);
+			return;
+		}
 		const td = this.scroll.querySelector(`td[data-r="${r}"][data-c="${c}"]`);
 		if (!td) return;
 		this.editing = true;
-		const current = this.rows[r][c] || "";
 		td.empty();
 		td.addClass("is-editing");
 		const input = td.createEl("input", { cls: "csv-wb-input", attr: { type: "text" } });
@@ -555,6 +707,7 @@ class CsvGrid {
 
 	cancelEdit() {
 		this.editing = false;
+		this.closePopover();
 		this.render();
 		this.select(this.sel.r, this.sel.c);
 		this.root.focus();
@@ -616,6 +769,7 @@ class CsvGrid {
 	}
 
 	render() {
+		this.closePopover();
 		const showNums = this.options.showRowNumbers !== false;
 		const maxRows = this.options.maxRows || 0;
 		const total = this.rowCount();
@@ -663,26 +817,34 @@ class CsvGrid {
 				});
 			}
 			for (let c = 0; c < this.colCount(); c++) {
+				const cellVal = this.rows[r][c] || "";
 				const td = tr.createEl("td");
 				td.dataset.r = String(r);
 				td.dataset.c = String(c);
-				td.setText(this.rows[r][c] || "");
-				td.title = this.rows[r][c] || "";
+				td.setText(cellVal);
+				if (this.isLongContent(cellVal)) td.addClass("is-clipped");
 				if (r === this.sel.r && c === this.sel.c) td.addClass("is-selected");
-				td.addEventListener("mousedown", (e) => {
+				td.addEventListener("click", (e) => {
 					if (e.button !== 0) return;
 					this.select(r, c);
 					this.root.focus();
+					if (this.isLongContent(cellVal)) this.showPreviewPopover(td, r, c);
+					else this.closePopover();
 				});
-				td.addEventListener("dblclick", () => {
+				td.addEventListener("dblclick", (e) => {
+					e.preventDefault();
 					this.select(r, c);
-					this.startEdit();
+					if (this.isLongContent(cellVal)) this.startEditPopover(r, c);
+					else this.startEdit();
 				});
 				td.addEventListener("contextmenu", (e) => {
 					e.preventDefault();
 					this.select(r, c);
 					const menu = new Menu();
-					menu.addItem((i) => i.setTitle("编辑").onClick(() => this.startEdit()));
+					menu.addItem((i) => i.setTitle("编辑").onClick(() => {
+						if (this.isLongContent(this.rows[r][c] || "")) this.startEditPopover(r, c);
+						else this.startEdit();
+					}));
 					menu.addItem((i) => i.setTitle("清空").onClick(() => this.setCell(r, c, "")));
 					menu.addSeparator();
 					menu.addItem((i) => i.setTitle("上方插入行").onClick(() => this.insertRow(r)));

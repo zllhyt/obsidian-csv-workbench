@@ -321,6 +321,101 @@
 	text-decoration: none !important;
 }
 
+.csv-wb table.csv-wb-table td.is-clipped {
+	cursor: zoom-in !important;
+}
+
+.csv-wb table.csv-wb-table td.is-clipped.is-selected {
+	cursor: pointer !important;
+}
+
+.csv-wb-popover {
+	position: fixed !important;
+	z-index: 10000 !important;
+	border: 1px solid #d0d7de !important;
+	border-radius: 8px !important;
+	background: #fff !important;
+	box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14) !important;
+	font-size: 13px !important;
+	color: #222 !important;
+}
+
+.theme-dark .csv-wb-popover {
+	background: var(--background-primary) !important;
+	border-color: var(--background-modifier-border) !important;
+	color: var(--text-normal) !important;
+}
+
+.csv-wb-popover-head {
+	padding: 8px 12px 6px !important;
+	border-bottom: 1px solid #eee !important;
+	font-size: 11px !important;
+	font-weight: 600 !important;
+	color: #8a4454 !important;
+	background: #fff5f8 !important;
+	border-radius: 8px 8px 0 0 !important;
+}
+
+.csv-wb-popover-body {
+	padding: 10px 12px !important;
+	max-width: min(560px, 92vw) !important;
+	max-height: 280px !important;
+	overflow: auto !important;
+	white-space: pre-wrap !important;
+	word-break: break-word !important;
+	line-height: 1.45 !important;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+	font-size: 12px !important;
+}
+
+.csv-wb-popover-foot {
+	padding: 6px 12px 8px !important;
+	border-top: 1px solid #f0f0f0 !important;
+	font-size: 11px !important;
+	color: #888 !important;
+}
+
+.csv-wb-popover-edit {
+	min-width: 320px !important;
+}
+
+.csv-wb-popover-textarea {
+	display: block !important;
+	width: min(560px, 92vw) !important;
+	min-height: 140px !important;
+	max-height: min(50vh, 420px) !important;
+	margin: 0 !important;
+	padding: 10px 12px !important;
+	border: none !important;
+	border-bottom: 1px solid #eee !important;
+	background: #fff !important;
+	color: #222 !important;
+	font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace !important;
+	resize: vertical !important;
+	outline: none !important;
+	box-sizing: border-box !important;
+}
+
+.csv-wb-popover-actions {
+	display: flex !important;
+	align-items: center !important;
+	gap: 8px !important;
+	flex-wrap: wrap !important;
+}
+
+.csv-wb-popover-save {
+	background: #ffd6e0 !important;
+	border-color: #f0b3c2 !important;
+	color: #6b3040 !important;
+	font-weight: 600 !important;
+}
+
+.csv-wb-popover-hint {
+	margin-left: auto !important;
+	color: #999 !important;
+	font-size: 10px !important;
+}
+
 .csv-wb-empty,
 .csv-wb-error {
 	padding: 24px !important;
